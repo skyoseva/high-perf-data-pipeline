@@ -38,6 +38,10 @@ jobs:
         # Копираме компилирания .so файл в корена за pytest
         cp *.so ..
 
+    - name: Verify compiled module location
+      run: ls -la cpp_processor*.so
+
     - name: Run Pytest
       run: |
+        export PYTHONPATH=$PWD
         pytest -v
