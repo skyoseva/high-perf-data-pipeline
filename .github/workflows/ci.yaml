@@ -44,6 +44,6 @@ jobs:
     - name: Run Pytest
       run: |
         pwd
-        python3 -c "import sys; print('\n'.join(sys.path))"
         export PYTHONPATH=$PWD
+        python3 -c "import sys; print('\n'.join(sys.path))"
         pytest -v
