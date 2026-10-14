@@ -15,3 +15,5 @@ execute_process(
 find_package(pybind11 CONFIG REQUIRED HINTS "${pybind11_DIR}")
 
 pybind11_add_module(cpp_processor src/cpp/processor.cpp)
+
+set_target_properties(cpp_processor PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
