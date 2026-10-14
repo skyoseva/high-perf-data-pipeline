@@ -37,6 +37,7 @@ jobs:
         cmake --build .
         # Копираме компилирания .so файл в корена за pytest
         cp *.so ..
+        cd ..
 
     - name: Verify compiled module location
       run: ls -la cpp_processor*.so
