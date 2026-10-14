@@ -22,7 +22,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake g++ build-essential
+        sudo apt-get install -y cmake g++ build-essential pybind11-dev python3-pybind11
 
     - name: Install Python dependencies
       run: |
@@ -33,7 +33,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR=$(python3 -m pybind11 --cmakedir) ..
+        cmake -DCMAKE_BUILD_TYPE=Release ..
         cmake --build .
         # Копираме компилирания .so файл в корена за pytest
         cp cpp_processor*.so ..
