@@ -17,7 +17,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
 
     - name: Install system dependencies
       run: |
@@ -35,7 +35,6 @@ jobs:
         cd build
         cmake -DCMAKE_BUILD_TYPE=Release ..
         cmake --build .
-        # Копираме компилирания .so файл в корена за pytest
 
     - name: Verify compiled module location
       run: ls -la cpp_processor*.so
