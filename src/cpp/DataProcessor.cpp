@@ -1,6 +1,6 @@
 #include "DataProcessor.hpp"
 
-StreamProcessor::StreamProcessor(size_t window_size=50, double anomaly_threshold_multiplier=2.5):window_size_(window_size), anomaly_threshold_multiplier_(anomaly_threshold_multiplier){}
+StreamProcessor::StreamProcessor(size_t window_size, double anomaly_threshold_multiplier):window_size_(window_size), anomaly_threshold_multiplier_(anomaly_threshold_multiplier){}
 AnalysisResult StreamProcessor::process_point(uint64_t timestamp, double value)
 {
     window_values_.push_back(value);

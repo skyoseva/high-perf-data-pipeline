@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
-project(cpp_processor)
+project(fast_processor)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -14,6 +14,6 @@ execute_process(
 
 find_package(pybind11 CONFIG REQUIRED HINTS "${pybind11_DIR}")
 
-pybind11_add_module(cpp_processor src/cpp/processor.cpp)
+pybind11_add_module(fast_processor src/cpp/DataProcessor.cpp src/cpp/bindings.cpp)
 
-set_target_properties(cpp_processor PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+set_target_properties(fast_processor PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
