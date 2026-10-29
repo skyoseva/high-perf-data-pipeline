@@ -27,7 +27,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest cmake numpy pandas duckdb pybind11
+        pip install pytest cmake numpy pandas duckdb pybind11 pyarrow
 
     - name: Build C++ module
       run: |
