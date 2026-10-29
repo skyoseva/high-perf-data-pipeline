@@ -10,9 +10,9 @@ PYBIND11_MODULE(fast_processor, m) {
 
     py::class_<DataPacket>(m, "DataPacket")
         .def(py::init<uint64_t, uint32_t, double>(),
-             py::arg("timestamp"), py::arg("device_id"), py::arg("value"))
+             py::arg("timestamp"), py::arg("asset_id"), py::arg("value"))
         .def_readwrite("timestamp", &DataPacket::timestamp)
-        .def_readwrite("device_id", &DataPacket::device_id)
+        .def_readwrite("asset_id", &DataPacket::asset_id)
         .def_readwrite("value", &DataPacket::value);
 
     py::class_<AnalysisResult>(m, "AnalysisResult")

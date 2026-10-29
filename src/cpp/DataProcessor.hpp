@@ -9,7 +9,7 @@ using namespace std;
 struct DataPacket
 {
     uint64_t timestamp;
-    uint32_t device_id;
+    uint32_t asset_id;
     double value;
 };
 

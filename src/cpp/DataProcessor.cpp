@@ -3,15 +3,6 @@
 StreamProcessor::StreamProcessor(size_t window_size, double anomaly_threshold_multiplier):window_size_(window_size), anomaly_threshold_multiplier_(anomaly_threshold_multiplier){}
 AnalysisResult StreamProcessor::process_point(uint64_t timestamp, double value)
 {
-    window_values_.push_back(value);
-    running_sum_ += value;
-
-    if(window_size_ < window_values_.size())
-    {
-        running_sum_ -= window_values_.front();
-        window_values_.pop_front();
-    }
-
     double mean = running_sum_/window_values_.size();
 
     double variance_sum = 0;
@@ -25,6 +16,15 @@ AnalysisResult StreamProcessor::process_point(uint64_t timestamp, double value)
 
     if(stddev > 1e-5 && window_values_.size() == window_size_)
         is_anomaly = abs(mean - value) > (stddev * anomaly_threshold_multiplier_);
+
+        window_values_.push_back(value);
+    running_sum_ += value;
+
+    if(window_size_ < window_values_.size())
+    {
+        running_sum_ -= window_values_.front();
+        window_values_.pop_front();
+    }
 
     return {timestamp, mean, is_anomaly};
 }

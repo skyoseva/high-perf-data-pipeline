@@ -1,52 +1,46 @@
-import os
 import pytest
-import cpp_processor
-import duckdb
+import fast_processor
+from src.python.pipeline import AnalyticalPipeline
 
-def test_cpp_sma_calculation():
-    """Tests if the cpp sma calculation is correct"""
+@pytest.fixture
+def pipeline():
+    pipe = AnalyticalPipeline(":memory:")
+    yield pipe
+    pipe.close()
 
-    prices = [10.0, 20.0, 30.0, 40.0]
-    window = 3
+def test_process_and_store(pipeline):
 
-    processor = cpp_processor.DataProcessor()
-    result = processor.calculate_sma(prices, window)
+    pipeline.register_asset(1, "AAPL", "stock")
 
-    assert len(result) == 2
+    packets = [fast_processor.DataPacket(1761058800 + i, 1, 1000 + i) for i in range(10)]
+    packets.append(fast_processor.DataPacket(1761058800 + 10, 1, 3))
+    packets.append(fast_processor.DataPacket(1761058800 + 11, 1, 5))
 
-    assert result[0] == 20.0
-    assert result[1] == 30.0
+    processor = fast_processor.StreamProcessor(window_size=5, threshold_multiplier=2.5)
+    results = processor.process_stream(packets)
 
-def test_db_integration():
-    """Test DB integration, create table and insert/select"""
+    pipeline.process_and_store(packets, results)
 
-    conn=duckdb.connect()
+    packets_count = pipeline.conn.execute("SELECT COUNT(*) FROM fact_stream_metrics").fetchone()
+    assert packets_count[0] == len(packets) #Ensure all packets are stored in database
 
-    conn.execute("""CREATE TABLE IF NOT EXISTS asset_metrics(
-                    id INTEGER PRIMARY KEY,
-                    symbol VARCHAR(10) NOT NULL,
-                    price DOUBLE NOT NULL,
-                    sma_3 DOUBLE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-                    """)
+    anomaly_count = pipeline.conn.execute("SELECT COUNT(*) FROM fact_stream_metrics WHERE is_anomaly = TRUE").fetchone()[0]
+    print(f"Anomalies found: {anomaly_count}")
 
-    conn.execute("INSERT INTO asset_metrics (id, symbol, price, sma_3) VALUES (?, ?, ?, ?)", (0, "AAPL", 150.0, None))
-    conn.execute("INSERT INTO asset_metrics (id, symbol, price, sma_3) VALUES (?, ?, ?, ?)", (1, "AAPL", 151.1, 152.1))
+    query_result = pipeline.conn.execute("""SELECT f.value, f.is_anomaly, da.ticker, da.market_type, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.day_of_week
+                                            FROM fact_stream_metrics f 
+                                            JOIN dim_assets da ON f.asset_id = da.id
+                                            JOIN dim_time dt ON f.timestamp = dt.timestamp
+                                            WHERE f.is_anomaly = TRUE
+                                            """).fetchall()
 
-    df = conn.execute("SELECT * FROM asset_metrics").fetchdf()
+    for row in query_result:
+        print(row)
 
-    assert len(df) == 2
-    assert df.loc[0, "price"] == 150.0
-    assert is_none_or_nan(df.loc[0, "sma_3"])
-    assert df.loc[1, "sma_3"] == 152.1
+    assert len(query_result) > 0
+    assert query_result[0][0] == 3  # Check the value of the anomaly
+    assert query_result[0][2] == "AAPL"  # Check the ticker symbol of the anomaly
+    assert query_result[0][3] == "stock"  # Check the market type of the anomaly
 
 
-def is_none_or_nan(val):
-    import math
-    if val is None:
-        return True
-    if isinstance(val, float) and math.isnan(val):
-        return True
-    return False
     
-

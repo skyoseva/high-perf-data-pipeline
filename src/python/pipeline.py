@@ -1,57 +1,69 @@
 import os
 import sys
+import pyarrow as pa
+import duckdb
+import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-import duckdb
-import cpp_processor
+import fast_processor
 
-def run_pipeline():
+class AnalyticalPipeline:
+    def __init__(self, db_path: str = "data_pipeline.duckdb"):
+        self.db_path = db_path
+        self.conn = duckdb.connect(self.db_path)
+        self._init_schema()
 
-    print("Initializing database and creating tables...")
-    conn = duckdb.connect("market_data.duckdb")
+    def _init_schema(self):
+        try:
+            with open("sql/schema.sql", "r") as f:
+                schema_sql = f.read()
+        except (FileNotFoundError, PermissionError) as e:
+            raise FileNotFoundError("Schema file not found or not readable at 'sql/schema.sql'. Please check the path.") from e
+        try:
+            self.conn.execute("BEGIN TRANSACTION;")
+            self.conn.execute(schema_sql)
+            self.conn.execute("COMMIT;")
+        except Exception as e:
+            self.conn.execute("ROLLBACK;")
+            raise RuntimeError(f"Schema initialization failed: {e}") from e
 
-    print("Reading the database schema...")
-    with open("sql/schema.sql", "r") as f:
-        conn.execute(f.read())
+    def register_asset(self, asset_id: int, ticker: str, market_type: str):
+        self.conn.execute(
+            "INSERT OR IGNORE INTO dim_assets (id, ticker, market_type) VALUES (?, ?, ?)",
+                (asset_id, ticker, market_type)
+        )
 
-    print("Getting data...")
-    raw_prices = [150.0, 152.5, 151.0, 155.0, 158.0, 157.5, 160.0]
-    symbol = "AAPL"
+    def process_and_store(self, packets:list, results:list):
+        if not packets or not results:
+            raise ValueError("Packets and results must not be empty.")
+        if len(packets) != len(results):
+            raise ValueError("Packets and results must have the same length.")
 
-    print("Calculating SMA values...")
-    processor = cpp_processor.DataProcessor()
-    sma = processor.calculate_sma(raw_prices, window = 3)
+        time_data = []
+        fact_data = []
 
-    print("Loading data into the table...")
-    conn.execute("DELETE FROM asset_metrics")
+        
+        for packet, result in zip(packets, results):
 
-    window = 3
+            ts = result.timestamp
+            dt = datetime.datetime.fromtimestamp(ts)
 
-    for i, price in enumerate(raw_prices):
-        sma_val = sma[i - window + 1] if i >= window - 1 else None
-        conn.execute("INSERT INTO asset_metrics (id, symbol, price, sma_3) VALUES (?, ?, ?, ?)", (i + 1, symbol, raw_prices[i], sma_val))
+            time_data.append({ "timestamp": ts, "year": dt.year, "month": dt.month, "day": dt.day, "hour": dt.hour, "minute": dt.minute, "day_of_week": dt.strftime("%A")})
+            fact_data.append({ "timestamp": packet.timestamp, "asset_id": packet.asset_id, "value": packet.value, "moving_average": result.moving_average, "is_anomaly": result.is_anomaly })
 
-    print("Running the analysis...")
-    query = """SELECT symbol, 
-                      id, 
-                      price,
-                      sma_3,
-                      ROUND(price - sma_3, 2) AS diff_from_sma,
-                      CASE
-                        WHEN price > sma_3 THEN 'BULLISH'
-                        WHEN price < sma_3 THEN 'BEARISH'
-                        ELSE 'NEUTRAL'
-                      END AS signal
-                FROM asset_metrics
-                WHERE sma_3 IS NOT NULL
-            """
+        time_table = pa.Table.from_pylist(time_data)
+        fact_table = pa.Table.from_pylist(fact_data)
 
-    result = conn.execute(query).fetchdf()
+        self.conn.execute("BEGIN TRANSACTION;")
+        try:
+            self.conn.execute("INSERT OR IGNORE INTO dim_time SELECT * FROM time_table")
+            self.conn.execute("INSERT INTO fact_stream_metrics SELECT * FROM fact_table")
+            self.conn.execute("COMMIT;")
+        except Exception as e:
+            self.conn.execute("ROLLBACK;")
+            raise RuntimeError(f"Failed to insert data into the database: {e}") from e
 
-    print("Result of the analysis: ")
-    print(result.to_string(index=1))
+    def close(self):
+        self.conn.close()
 
-if __name__ == "__main__":
-    print("running pipeline")
-    run_pipeline()

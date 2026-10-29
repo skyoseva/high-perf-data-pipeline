@@ -37,7 +37,7 @@ jobs:
         cmake --build .
 
     - name: Verify compiled module location
-      run: ls -la cpp_processor*.so
+      run: ls -la fast_processor*.so
 
     - name: Run Pytest
       run: |
