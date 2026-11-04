@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Building module in release mode"
+echo "Building module in debug mode"
 
 rm -rf build
 mkdir build

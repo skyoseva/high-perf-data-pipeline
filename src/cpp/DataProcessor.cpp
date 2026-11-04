@@ -1,23 +1,23 @@
 #include "DataProcessor.hpp"
 
-StreamProcessor::StreamProcessor(size_t window_size, double anomaly_threshold_multiplier):window_size_(window_size), anomaly_threshold_multiplier_(anomaly_threshold_multiplier){}
-AnalysisResult StreamProcessor::process_point(uint64_t timestamp, double value)
+std::vector<AnalysisResult> StreamProcessor::process_stream(const std::vector<DataPacket>& packets)
 {
-    double mean = running_sum_/window_values_.size();
+    std::vector<AnalysisResult> result;
+    result.reserve(packets.size());
 
-    double variance_sum = 0;
+    for(const auto& packet: packets)
+        result.push_back(process_point(packet.timestamp, packet.value));
+    return result;
+}
 
-    for(double value: window_values_)
-        variance_sum += (value - mean) * (value - mean);
+WindowStreamProcessor::WindowStreamProcessor(size_t window_size, double threshold_multiplier, double min_percentage_floor)
+    : window_size_(window_size), 
+      threshold_multiplier_(threshold_multiplier),
+      min_percentage_floor_(min_percentage_floor) {}
 
-    double stddev = sqrt(variance_sum/window_values_.size());
-
-    bool is_anomaly = false;
-
-    if(stddev > 1e-5 && window_values_.size() == window_size_)
-        is_anomaly = abs(mean - value) > (stddev * anomaly_threshold_multiplier_);
-
-        window_values_.push_back(value);
+AnalysisResult WindowStreamProcessor::process_point(uint64_t timestamp, double value)
+{
+    window_values_.push_back(value);
     running_sum_ += value;
 
     if(window_size_ < window_values_.size())
@@ -26,22 +26,74 @@ AnalysisResult StreamProcessor::process_point(uint64_t timestamp, double value)
         window_values_.pop_front();
     }
 
+    double mean = value;
+    double stddev = 0.0;
+    bool is_anomaly = false;
+
+    if (window_values_.size() == window_size_) {
+        mean = running_sum_ / window_size_;
+
+        double sq_sum = 0.0;
+        for (double val : window_values_) {
+            sq_sum += (val - mean) * (val - mean);
+        }
+        stddev = std::sqrt(sq_sum / window_size_);
+
+        double percentage_floor = mean * min_percentage_floor_;
+        double effective_stddev = std::max(stddev, std::max(percentage_floor, 1e-5));
+
+        if (std::abs(mean - value) > (effective_stddev * threshold_multiplier_)) {
+            is_anomaly = true;
+        }
+    }
+
     return {timestamp, mean, is_anomaly};
 }
 
-std::vector<AnalysisResult> StreamProcessor::process_stream(const std::vector<DataPacket> packets)
-{
-    std::vector<AnalysisResult> result;
-    result.reserve(packets.size());
-
-    for(DataPacket packet: packets)
-        result.push_back(process_point(packet.timestamp, packet.value));
-
-    return result;
-}
-
-void StreamProcessor::reset()
+void WindowStreamProcessor::reset()
 {
     window_values_.clear();
     running_sum_ = 0;
+    threshold_multiplier_ = 2.5; // Reset to default value
+    window_size_ = 50; // Reset to default value
+    min_percentage_floor_ = 0.0002; // Reset to default value
 }
+
+EwmaStreamProcessor::EwmaStreamProcessor(double alpha, double threshold_multiplier,double min_percentage_floor)
+    : alpha_(alpha), threshold_multiplier_(threshold_multiplier), current_ema_(0.0), current_deviation_(0.0), initialized_(false), min_percentage_floor_(min_percentage_floor) {}
+
+AnalysisResult EwmaStreamProcessor::process_point(uint64_t timestamp, double value) {
+    bool is_anomaly = false;
+
+    if (!initialized_) {
+        current_ema_ = value;
+        current_deviation_ = 1.0;
+        initialized_ = true;
+        return {timestamp, current_ema_, false};
+    }
+
+    double residual = std::abs(value - current_ema_);
+    double percentage_floor = current_ema_ * min_percentage_floor_;
+    double min_floor = std::max(percentage_floor, 1e-5);
+    double effective_deviation = std::max(current_deviation_, min_floor);
+
+    if (residual > (effective_deviation * threshold_multiplier_)) {
+        is_anomaly = true;
+    }
+
+    if (!is_anomaly) {
+        current_ema_ = alpha_ * value + (1.0 - alpha_) * current_ema_;
+        current_deviation_ = alpha_ * residual + (1.0 - alpha_) * current_deviation_;
+    }
+
+    return {timestamp, current_ema_, is_anomaly};
+}
+
+void EwmaStreamProcessor::reset() {
+    current_ema_ = 0.0;
+    current_deviation_ = 0.0;
+    initialized_ = false;
+    alpha_ = 0.2; // Reset to default value
+    threshold_multiplier_ = 2.5; // Reset to default value
+}
+

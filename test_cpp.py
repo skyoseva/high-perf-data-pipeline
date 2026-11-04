@@ -6,8 +6,8 @@ timestamp = 1761058800
 value = 1000
 for i in range(10):
     packets.append(fast_processor.DataPacket(timestamp + i, 1, value + i))
-packets.append(fast_processor.DataPacket(1761058800 + 10, 1, 3))
-packets.append(fast_processor.DataPacket(1761058800 + 11, 1, 5))
+packets.append(fast_processor.DataPacket(1761058800 + 10, 1, 5))
+packets.append(fast_processor.DataPacket(1761058800 + 11, 1, 3))
 
 
 processor = fast_processor.StreamProcessor(window_size = 5, threshold_multiplier = 2.5)

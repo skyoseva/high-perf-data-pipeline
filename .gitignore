@@ -1,6 +1,6 @@
 venv/
 build/
-*.duckdb
+*.duckdb*
 .vscode/
 __pycache__/
 *.so
