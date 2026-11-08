@@ -15,7 +15,7 @@ async def run_stream(symbol:str, asset_id:int, pipeline:AnalyticalPipeline):
     
     pipeline.register_asset(asset_id, symbol.lower(), "CRYPTO")
 
-    processor = fast_processor.StreamProcessor(window_size=20, threshold_multiplier=2.5)
+    processor = fast_processor.WindowStreamProcessor(window_size=20, threshold_multiplier=2.5)
     reconnect_delay = 2  # seconds
     max_delay = 60  # seconds
     last_trade_id = -1  # Initialize with an invalid trade ID

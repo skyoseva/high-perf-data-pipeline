@@ -54,9 +54,6 @@ void WindowStreamProcessor::reset()
 {
     window_values_.clear();
     running_sum_ = 0;
-    threshold_multiplier_ = 2.5; // Reset to default value
-    window_size_ = 50; // Reset to default value
-    min_percentage_floor_ = 0.0002; // Reset to default value
 }
 
 EwmaStreamProcessor::EwmaStreamProcessor(double alpha, double threshold_multiplier,double min_percentage_floor)
@@ -93,7 +90,5 @@ void EwmaStreamProcessor::reset() {
     current_ema_ = 0.0;
     current_deviation_ = 0.0;
     initialized_ = false;
-    alpha_ = 0.2; // Reset to default value
-    threshold_multiplier_ = 2.5; // Reset to default value
 }
 

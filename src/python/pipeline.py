@@ -47,7 +47,7 @@ class AnalyticalPipeline:
         for packet, result in zip(packets, results):
 
             ts = result.timestamp
-            dt = datetime.datetime.fromtimestamp(ts)
+            dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
 
             time_data.append({ "timestamp": ts, "year": dt.year, "month": dt.month, "day": dt.day, "hour": dt.hour, "minute": dt.minute, "day_of_week": dt.strftime("%A")})
             fact_data.append({ "timestamp": packet.timestamp, "asset_id": packet.asset_id, "value": packet.value, "moving_average": result.moving_average, "is_anomaly": result.is_anomaly })
