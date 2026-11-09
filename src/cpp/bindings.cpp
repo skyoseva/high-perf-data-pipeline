@@ -35,6 +35,7 @@ PYBIND11_MODULE(fast_processor, m) {
              py::arg("threshold_multiplier") = 2.5, 
              py::arg("min_percentage_floor") = 0.0002)
         .def("process_point", &WindowStreamProcessor::process_point)
+        .def("process_stream", &StreamProcessor::process_stream)
         .def("reset", &WindowStreamProcessor::reset);
 
     py::class_<EwmaStreamProcessor, StreamProcessor, std::shared_ptr<EwmaStreamProcessor>>(m, "EwmaStreamProcessor")
@@ -42,6 +43,7 @@ PYBIND11_MODULE(fast_processor, m) {
              py::arg("alpha") = 0.2, 
              py::arg("threshold_multiplier") = 2.5, 
              py::arg("min_percentage_floor") = 0.0002)
-        .def("process_point", &EwmaStreamProcessor::process_point)    
+        .def("process_point", &EwmaStreamProcessor::process_point)  
+        .def("process_stream", &StreamProcessor::process_stream)  
         .def("reset", &EwmaStreamProcessor::reset);
 }
