@@ -1,6 +1,6 @@
 import asyncio
 import json
-from time import time
+import time
 import websockets
 from pipeline import AnalyticalPipeline
 import os
@@ -58,7 +58,9 @@ async def run_stream(symbol:str, asset_id:int, queue: asyncio.Queue, batch_size:
                             await flush_buffer()
 
                     except asyncio.TimeoutError:
-                        if raw_buffer  (time.time() - last_flush_time) >= flush_interval:
+                        if not raw_buffer:
+                            last_flush_time = time.time()  # Update last flush time even if no data was received
+                        elif (time.time() - last_flush_time) >= flush_interval:
                             await flush_buffer()
                         continue  # Continue to the next iteration to check for new messages or flush 
         except websockets.exceptions.ConnectionClosed:
@@ -77,17 +79,22 @@ async def pipeline_writer(queue: asyncio.Queue, db_path: str):
 
     try:
         while True:
-            packets, results = await queue.get()
-            pipeline.process_and_store(packets, results)
+            try:
+                packets, results = await queue.get()
+                pipeline.process_and_store(packets, results)
+                print(f"💾 [DuckDB] Successfully committed batch of {len(packets)} rows.")
+            except Exception as db_err:
+                print(f"🚨 [DuckDB ERROR] Failed to write batch: {db_err}")
             queue.task_done()
     except asyncio.CancelledError:
+        print("Pipeline writer shutting down. Draining remaining queue items...")
         while not queue.empty():
             try:
                 packets, results = queue.get_nowait()
                 pipeline.process_and_store(packets, results)
                 queue.task_done()
             except Exception as e:
-                print(f"An error occurred in the pipeline writer: {e}")
+                print(f"🚨 [DuckDB ERROR] during shutdown drain: {e}")
         print("Pipeline writer task cancelled. Closing the database connection.")
         pipeline.close()
         raise
@@ -100,8 +107,9 @@ async def main():
 
     try:
         await asyncio.gather(
-            run_stream("BTCUSDT", 1, pipeline),
-            run_stream("ETHUSDT", 2, pipeline)
+            run_stream("AAPL", 1, queue),
+            run_stream("BTCUSDT", 3, queue),
+            run_stream("ETHUSDT", 2, queue)
         )
     finally:
         writer_task.cancel()

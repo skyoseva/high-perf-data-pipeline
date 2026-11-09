@@ -40,20 +40,32 @@ class AnalyticalPipeline:
         if len(packets) != len(results):
             raise ValueError("Packets and results must have the same length.")
 
-        time_data = []
-        fact_data = []
+        # 1. Extract columnar vectors directly without creating row-level dicts
+        timestamps = [p.timestamp for p in packets]
+        asset_ids = [p.asset_id for p in packets]
+        values = [p.value for p in packets]
+        moving_averages = [r.moving_average for r in results]
+        is_anomalies = [r.is_anomaly for r in results]
 
-        
-        for packet, result in zip(packets, results):
+        # 2. Extract time dimensions directly via vector comprehensions
+        dts = [datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc) for ts in timestamps]
+        years = [dt.year for dt in dts]
+        months = [dt.month for dt in dts]
+        days = [dt.day for dt in dts]
+        hours = [dt.hour for dt in dts]
+        minutes = [dt.minute for dt in dts]
+        days_of_week = [dt.strftime("%A") for dt in dts]
 
-            ts = result.timestamp
-            dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+        # 3. Construct PyArrow Tables directly from column arrays
+        time_table = pa.Table.from_arrays(
+            [timestamps, years, months, days, hours, minutes, days_of_week],
+            names=["timestamp", "year", "month", "day", "hour", "minute", "day_of_week"]
+        )
 
-            time_data.append({ "timestamp": ts, "year": dt.year, "month": dt.month, "day": dt.day, "hour": dt.hour, "minute": dt.minute, "day_of_week": dt.strftime("%A")})
-            fact_data.append({ "timestamp": packet.timestamp, "asset_id": packet.asset_id, "value": packet.value, "moving_average": result.moving_average, "is_anomaly": result.is_anomaly })
-
-        time_table = pa.Table.from_pylist(time_data)
-        fact_table = pa.Table.from_pylist(fact_data)
+        fact_table = pa.Table.from_arrays(
+            [timestamps, asset_ids, values, moving_averages, is_anomalies],
+            names=["timestamp", "asset_id", "value", "moving_average", "is_anomaly"]
+        )
 
         self.conn.execute("BEGIN TRANSACTION;")
         try:
