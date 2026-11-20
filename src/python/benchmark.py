@@ -68,6 +68,7 @@ def benchmark_arrays():
     )
     return time_table, fact_table
 
+""" Cannot run polars benchmark due to missing CPU features on this machine. The following function is provided for reference.
 def benchmark_polars():
     df = pl.DataFrame({
     "timestamp": [p.timestamp for p in packets],
@@ -94,7 +95,7 @@ def benchmark_polars():
     fact_table = df.select(["timestamp", "asset_id", "value", "moving_average", "is_anomaly"]).to_arrow()
 
     return time_table, fact_table
-
+"""
 
 
 if __name__ == "__main__":

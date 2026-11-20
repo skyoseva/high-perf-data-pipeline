@@ -47,5 +47,61 @@ def test_process_and_store(pipeline, processortype):
     assert query_result[0][2] == "AAPL"  # Check the ticker symbol of the anomaly
     assert query_result[0][3] == "stock"  # Check the market type of the anomaly
 
-
+def test_same_second_timestamp_collision(pipeline):
+    pipeline.register_asset(1, "BTCUSDT", "CRYPTO")
     
+    # Two different trades arriving in the exact same second
+    timestamp = 1761058800
+    packets = [
+        fast_processor.DataPacket(timestamp, 1, 50000.0),
+        fast_processor.DataPacket(timestamp, 1, 50001.0)
+    ]
+    
+    processor = fast_processor.WindowStreamProcessor()
+    results = processor.process_stream(packets)
+
+    # Should insert successfully without crashing on dim_time primary key collision
+    pipeline.process_and_store(packets, results)
+
+    count = pipeline.conn.execute("SELECT COUNT(*) FROM dim_time WHERE timestamp = ?", (timestamp,)).fetchone()[0]
+    assert count == 1  # dim_time should deduplicate the shared timestamp
+    
+    fact_count = pipeline.conn.execute("SELECT COUNT(*) FROM fact_stream_metrics").fetchone()[0]
+    assert fact_count == 2  # both trade facts should still be recorded
+
+def test_process_and_store_validation_errors(pipeline):
+    # Test empty inputs
+    with pytest.raises(ValueError, match="Packets and results must not be empty"):
+        pipeline.process_and_store([], [])
+
+    # Test length mismatch
+    packet1 = fast_processor.DataPacket(1761058800, 1, 100.0)
+    packet2 = fast_processor.DataPacket(1761058801, 2, 122.0)
+    processor = fast_processor.WindowStreamProcessor()
+    result = processor.process_stream([packet1])
+
+    with pytest.raises(ValueError, match="Packets and results must have the same length"):
+        pipeline.process_and_store([packet1, packet2], result)
+
+def test_multi_asset_batch_storage(pipeline):
+    pipeline.register_asset(1, "BTCUSDT", "CRYPTO")
+    pipeline.register_asset(2, "ETHUSDT", "CRYPTO")
+
+    packets = [
+        fast_processor.DataPacket(1761058800, 1, 60000.0),
+        fast_processor.DataPacket(1761058801, 2, 3000.0),
+    ]
+    
+    processor = fast_processor.WindowStreamProcessor()
+    results = processor.process_stream(packets)
+
+    pipeline.process_and_store(packets, results)
+
+    tickers = pipeline.conn.execute("""
+        SELECT DISTINCT da.ticker 
+        FROM fact_stream_metrics f 
+        JOIN dim_assets da ON f.asset_id = da.id
+        ORDER BY da.ticker""").fetchall()
+    
+    # Should find both tickers in the stored metrics
+    assert len(tickers) == 2

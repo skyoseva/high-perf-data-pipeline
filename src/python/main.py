@@ -1,7 +1,9 @@
 import asyncio
 import json
 import time
+import threading
 import websockets
+import uvicorn
 from pipeline import AnalyticalPipeline
 import os
 import sys
@@ -9,6 +11,11 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 import fast_processor
+from api.main import app, DB_PATH
+
+def start_fastapi():
+    """Runs the FastAPI server in a background thread within the same process."""
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
 
 async def run_stream(symbol:str, asset_id:int, queue: asyncio.Queue, batch_size:int = 50, flush_interval:float = 1.0):
 
@@ -82,17 +89,17 @@ async def pipeline_writer(queue: asyncio.Queue, db_path: str):
             try:
                 packets, results = await queue.get()
                 pipeline.process_and_store(packets, results)
-                print(f"💾 [DuckDB] Successfully committed batch of {len(packets)} rows.")
+                #print(f"💾 [DuckDB] Successfully committed batch of {len(packets)} rows.")
             except Exception as db_err:
                 print(f"🚨 [DuckDB ERROR] Failed to write batch: {db_err}")
-            queue.task_done()
+            #queue.task_done()
     except asyncio.CancelledError:
         print("Pipeline writer shutting down. Draining remaining queue items...")
         while not queue.empty():
             try:
                 packets, results = queue.get_nowait()
                 pipeline.process_and_store(packets, results)
-                queue.task_done()
+                #queue.task_done()
             except Exception as e:
                 print(f"🚨 [DuckDB ERROR] during shutdown drain: {e}")
         print("Pipeline writer task cancelled. Closing the database connection.")
@@ -102,6 +109,10 @@ async def pipeline_writer(queue: asyncio.Queue, db_path: str):
 async def main():
     db_path = "stream_analytics.duckdb"
     queue = asyncio.Queue()
+
+    api_thread = threading.Thread(target=start_fastapi, daemon=True)
+    api_thread.start()
+    print("🚀 FastAPI server started at http://127.0.0.1:8000 (Docs: /docs)")
 
     writer_task = asyncio.create_task(pipeline_writer(queue, db_path))
 
