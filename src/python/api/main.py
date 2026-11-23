@@ -11,11 +11,10 @@ app = FastAPI(
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../stream_analytics.duckdb"))
 
 def get_db():
-    """Dependency that yields a read-only DuckDB connection for safe concurrent access."""
+    """Dependency that yields a DuckDB connection."""
     if not os.path.exists(DB_PATH):
         raise HTTPException(status_code=503, detail="Database file not found. Is the pipeline running?")
     
-    # Open connection in read-only mode to prevent conflicts with the active writer worker
     conn = duckdb.connect(DB_PATH)
     try:
         yield conn
@@ -104,20 +103,42 @@ def get_ohlcv_candles(
     candlesticks using DuckDB native aggregations.
     """
     query = """
-        SELECT 
-            da.ticker,
-            CAST((f.timestamp / ?) * ? AS BIGINT) AS bucket_timestamp,
-            arg_min(f.value, f.timestamp) AS open_price,
-            MAX(f.value) AS high_price,
-            MIN(f.value) AS low_price,
-            arg_max(f.value, f.timestamp) AS close_price,
-            COUNT(*) AS tick_count
-        FROM fact_stream_metrics f
-        JOIN dim_assets da ON f.asset_id = da.id
-        WHERE da.ticker = ?
-        GROUP BY da.ticker, bucket_timestamp
+        WITH candles AS (
+            SELECT
+                da.ticker,
+                CAST((f.timestamp / ?) * ? AS BIGINT) AS bucket_timestamp,
+                arg_min(f.value, f.timestamp) AS open_price,
+                MAX(f.value) AS high_price,
+                MIN(f.value) AS low_price,
+                arg_max(f.value, f.timestamp) AS close_price,
+                COUNT(*) AS tick_count
+            FROM fact_stream_metrics f
+            JOIN dim_assets da ON f.asset_id = da.id
+            WHERE da.ticker = ?
+            GROUP BY da.ticker, bucket_timestamp
+        )
+        SELECT
+            ticker,
+            bucket_timestamp,
+            open_price,
+            high_price,
+            low_price,
+            close_price,
+            tick_count,
+            -- Previous candle's close price for return calculation
+            LAG(close_price, 1) OVER w AS prev_close,
+            -- Percentage return from the previous candle's close
+            (close_price - LAG(close_price, 1) OVER w) / NULLIF(LAG(close_price, 1) OVER w, 0) AS candle_return,
+            -- 5-candle rolling simple moving average of close_price (current + 4 prior buckets)
+            AVG(close_price) OVER (
+                PARTITION BY ticker
+                ORDER BY bucket_timestamp ASC
+                ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+            ) AS sma_5_close
+        FROM candles
+        WINDOW w AS (PARTITION BY ticker ORDER BY bucket_timestamp ASC)
         ORDER BY bucket_timestamp DESC
-        LIMIT ?
+        LIMIT ?;
     """
     
     # Parameters map safely to the query placeholders to prevent injection
@@ -141,7 +162,10 @@ def get_ohlcv_candles(
             "high": row[3],
             "low": row[4],
             "close": row[5],
-            "tick_count": row[6]
+            "tick_count": row[6],
+            "prev_close": row[7],
+            "candle_return": row[8],
+            "sma_5_close": row[9]
         }
         for row in rows
     ]
